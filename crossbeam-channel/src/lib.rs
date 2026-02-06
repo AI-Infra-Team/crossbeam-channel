@@ -355,6 +355,8 @@ mod select_macro;
 #[cfg(feature = "std")]
 mod utils;
 #[cfg(feature = "std")]
+mod wait_free;
+#[cfg(feature = "std")]
 mod waker;
 
 /// Crate internals used by the `select!` macro.
@@ -374,4 +376,5 @@ pub use crate::{
         SendTimeoutError, TryReadyError, TryRecvError, TrySelectError, TrySendError,
     },
     select::{Select, SelectedOperation},
+    wait_free::{wait_free_bounded, WaitFreeReceiver, WaitFreeSender, WaitFreeSenderRegistry},
 };

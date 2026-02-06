@@ -23,6 +23,7 @@ Some highlights:
 * The [`select!`] macro can block on multiple channel operations.
 * [`Select`] can select over a dynamically built list of channel operations.
 * Channels use locks very sparingly for maximum [performance](benchmarks).
+* Experimental [`wait_free_bounded`] supports fixed-topology non-blocking messaging.
 
 [`std::sync::mpsc`]: https://doc.rust-lang.org/std/sync/mpsc/index.html
 [`Sender`]: https://docs.rs/crossbeam-channel/latest/crossbeam_channel/struct.Sender.html
@@ -32,6 +33,7 @@ Some highlights:
 [`after`]: https://docs.rs/crossbeam-channel/latest/crossbeam_channel/fn.after.html
 [`never`]: https://docs.rs/crossbeam-channel/latest/crossbeam_channel/fn.never.html
 [`tick`]: https://docs.rs/crossbeam-channel/latest/crossbeam_channel/fn.tick.html
+[`wait_free_bounded`]: https://docs.rs/crossbeam-channel/latest/crossbeam_channel/fn.wait_free_bounded.html
 [`select!`]: https://docs.rs/crossbeam-channel/latest/crossbeam_channel/macro.select.html
 [`Select`]: https://docs.rs/crossbeam-channel/latest/crossbeam_channel/struct.Select.html
 
@@ -43,6 +45,55 @@ Add this to your `Cargo.toml`:
 [dependencies]
 crossbeam-channel = "0.5"
 ```
+
+## Experimental wait-free API
+
+For fixed-topology systems that only need non-blocking operations, the crate provides
+[`wait_free_bounded`].
+
+This API has explicit trade-offs:
+
+* Sender count is fixed up front and each sender must register a slot.
+* Capacity is preallocated per sender slot.
+* Only `try_send` and `try_recv` are supported.
+* Blocking operations and `select!` are intentionally unsupported.
+
+```rust
+use std::thread;
+use crossbeam_channel::{wait_free_bounded, TryRecvError, TrySendError};
+
+let (registry, mut receiver) = wait_free_bounded::<u64>(2, 32);
+let sender0 = registry.register().unwrap();
+let sender1 = registry.register().unwrap();
+registry.close();
+
+thread::spawn(move || {
+    for value in 0..100 {
+        let mut pending = value;
+        loop {
+            match sender0.try_send(pending) {
+                Ok(()) => break,
+                Err(TrySendError::Full(v)) => {
+                    pending = v;
+                    thread::yield_now();
+                }
+                Err(TrySendError::Disconnected(_)) => return,
+            }
+        }
+    }
+});
+
+let mut received = 0;
+while received < 100 {
+    match receiver.try_recv() {
+        Ok(_) => received += 1,
+        Err(TryRecvError::Empty) => thread::yield_now(),
+        Err(TryRecvError::Disconnected) => break,
+    }
+}
+```
+
+See [`examples/wait_free.rs`](examples/wait_free.rs) for a complete runnable example.
 
 ## Compatibility
 
