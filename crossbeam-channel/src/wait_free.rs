@@ -2,7 +2,9 @@
 //!
 //! This API intentionally supports only non-blocking operations.
 
+use std::boxed::Box;
 use std::cell::UnsafeCell;
+use std::fmt;
 use std::mem::MaybeUninit;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
@@ -66,6 +68,15 @@ pub struct WaitFreeSenderRegistry<T> {
     inner: Arc<Inner<T>>,
 }
 
+impl<T> fmt::Debug for WaitFreeSenderRegistry<T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("WaitFreeSenderRegistry")
+            .field("total_slots", &self.total_slots())
+            .field("remaining_slots", &self.remaining_slots())
+            .finish()
+    }
+}
+
 impl<T> WaitFreeSenderRegistry<T> {
     /// Tries to register a sender into an available slot.
     ///
@@ -122,7 +133,9 @@ impl<T> WaitFreeSenderRegistry<T> {
 
 impl<T> Drop for WaitFreeSenderRegistry<T> {
     fn drop(&mut self) {
-        self.close();
+        self.inner
+            .registration_closed
+            .store(true, Ordering::Release);
     }
 }
 
@@ -130,6 +143,14 @@ impl<T> Drop for WaitFreeSenderRegistry<T> {
 pub struct WaitFreeSender<T> {
     inner: Arc<Inner<T>>,
     slot: usize,
+}
+
+impl<T> fmt::Debug for WaitFreeSender<T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("WaitFreeSender")
+            .field("slot", &self.slot)
+            .finish()
+    }
 }
 
 impl<T> WaitFreeSender<T> {
@@ -165,6 +186,14 @@ impl<T> Drop for WaitFreeSender<T> {
 pub struct WaitFreeReceiver<T> {
     inner: Arc<Inner<T>>,
     next_slot: usize,
+}
+
+impl<T> fmt::Debug for WaitFreeReceiver<T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("WaitFreeReceiver")
+            .field("next_slot", &self.next_slot)
+            .finish()
+    }
 }
 
 impl<T> WaitFreeReceiver<T> {
